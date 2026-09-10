@@ -15,7 +15,7 @@ const translations = {
     'hero.secondary': 'Pozrieť oblasti',
     'about.label': 'O mne',
     'about.heading': 'Praktický prístup k zlepšovaniu procesov',
-    'about.body1': '„Zameriavam sa na to, aby firmy mali jasnú víziu, kam sa chcú dostať, správne nastavené procesy bez plytvania a čo najviac automatizovaných opakujúcich sa činností. Kombinujem praktický hands-on prístup — som v tom s vami, žiadna teória od stola. Podporujem zavádzanie zlepšovacích techník Lean a Six Sigma, podporených modernými AI agentmi a automatizačnými nástrojmi, ktoré fungujú v reálnej prevádzke.“',
+    'about.body1': '„Zameriavam sa na to, aby firmy mali jasnú víziu, kam sa chcú dostať, správne nastavené procesy bez plytvania a čo najviac automatizovaných opakujúcich sa činností. Kombinujem praktický hands-on prístup — som v tom s vami, žiadna teória od stola. Podporujem zavádzanie zlepšovacích techník Lean a Six Sigma, doplnených modernými AI agentmi a automatizačnými nástrojmi, ktoré fungujú v reálnej prevádzke.“',
     'about.body2': 'Viac ako 15 rokov riadim projekty a zlepšovanie prevádzkových procesov — v oprave a reverznej logistike, ako projektový manažér v energetike, a v posledných rokoch ako transformačný konzultant. Som Ing. elektrotechniky so skúsenosťami naprieč EMEA, NAM aj LatAm a spájam Lean Six Sigma prístup s modernou automatizáciou a AI, aby zlepšenia reálne fungovali v prevádzke, nie len na papieri.',
     'services.label': 'Oblasti spolupráce',
     'services.heading': 'Ako tieto oblasti menia a pomáhajú',
