@@ -1,0 +1,49 @@
+{
+  "name": "Website Chat - Lead Capture",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "lead-capture",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "CHANGE_ME@example.com",
+        "toEmail": "jd19211@gmail.com",
+        "subject": "=Nový lead z webu — {{$json.body.email}}",
+        "text": "=Email: {{$json.body.email}}\nJazyk: {{$json.body.lang}}\nČas: {{$json.body.timestamp}}\n\nPrepis konverzácie:\n{{$json.body.transcript.map(m => (m.role === 'user' ? 'Návštevník' : 'AI') + ': ' + m.text).join('\\n')}}",
+        "options": {}
+      },
+      "id": "email-node",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [500, 300],
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_WITH_YOUR_SMTP_CREDENTIAL_ID",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          { "node": "Send Email", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
