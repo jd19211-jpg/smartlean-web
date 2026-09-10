@@ -43,10 +43,19 @@ if (!is_array($messages) || count($messages) === 0) {
     exit;
 }
 
-$systemPrompts = [
+$systemPromptDefaults = [
     'sk' => "Si AI asistent na webe Igora, konzultanta pre Management, Lean, Six Sigma a Automatizáciu (UiPath, n8n, AI agenti).\nTvoja úloha je stručne a vecne odpovedať na otázky návštevníkov o týchto oblastiach a o tom, ako môže Igor pomôcť ich firme.\nAk návštevník prejaví reálny záujem o spoluprácu, zdvorilo ho požiadaj o email, aby sa mu Igor mohol ozvať.\nOdpovedaj v slovenčine, stručne (max 3-4 vety), profesionálne a priateľsky. Nevymýšľaj si konkrétne ceny, termíny ani referencie, ktoré nepoznáš.",
     'en' => "You are the AI assistant on Igor's website, a consultant for Management, Lean, Six Sigma, and Automation (UiPath, n8n, AI agents).\nYour job is to answer visitor questions about these areas concisely and helpfully, and explain how Igor can help their company.\nIf a visitor shows genuine interest in working together, politely ask for their email so Igor can follow up.\nReply in English, concisely (max 3-4 sentences), professional and friendly. Do not invent specific prices, availability, or references you don't know."
 ];
+
+$promptFile = __DIR__ . '/../prompts/system-' . $lang . '.txt';
+$systemPrompt = $systemPromptDefaults[$lang];
+if (is_readable($promptFile)) {
+    $fileContent = trim((string) file_get_contents($promptFile));
+    if ($fileContent !== '') {
+        $systemPrompt = $fileContent;
+    }
+}
 
 $contents = [];
 foreach ($messages as $m) {
@@ -56,7 +65,7 @@ foreach ($messages as $m) {
 }
 
 $payload = json_encode([
-    'systemInstruction' => ['parts' => [['text' => $systemPrompts[$lang]]]],
+    'systemInstruction' => ['parts' => [['text' => $systemPrompt]]],
     'contents' => $contents
 ]);
 
