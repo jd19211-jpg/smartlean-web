@@ -10,7 +10,7 @@ const translations = {
     'nav.cases': 'Referencie',
     'nav.contact': 'Kontakt',
     'hero.title': 'Igor',
-    'hero.subtitle': 'Som Igor a pomôžem vám odstrániť plytvanie a variabilitu, zlepšiť vaše procesy, a automatizovať ich zavedením overených metód Lean, Six Sigma a modernej AI agentickej automatizácie.',
+    'hero.subtitle': 'Som Igor a pomôžem vám odstrániť plytvanie a variabilitu, zlepšiť vaše procesy a automatizovať ich zavedením overených metód Lean, Six Sigma a modernej AI agentickej automatizácie.',
     'hero.cta': 'Dohodnúť konzultáciu',
     'hero.secondary': 'Pozrieť oblasti',
     'about.label': 'O mne',
