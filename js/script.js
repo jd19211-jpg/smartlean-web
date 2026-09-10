@@ -28,7 +28,7 @@ const translations = {
     'services.management.tag5': 'Projektový manažment',
     'services.lean.body': 'Lean odstraňuje plytvanie a zjednodušuje procesy pomocou overených techník.',
     'services.lean.tag2': '5x Prečo',
-    'services.lean.tag3': '8 druhov plytvania',
+    'services.lean.tag3': '8 typov plytvania',
     'services.sixsigma.body': 'Six Sigma znižuje variabilitu vo výrobe, procesoch aj výstupoch, aby boli výsledky konzistentné a predvídateľné.',
     'services.sixsigma.tag2': 'Kontrola procesov',
     'services.sixsigma.tag3': 'Analýza príčin variability',
