@@ -16,7 +16,7 @@ const translations = {
     'about.label': 'O mne',
     'about.heading': 'Praktický prístup k zlepšovaniu procesov',
     'about.body1': '„Zameriavam sa na to, aby firmy mali jasnú víziu, kam sa chcú dostať, správne nastavené procesy bez plytvania a čo najviac automatizovaných opakujúcich sa činností. Kombinujem praktický hands-on prístup — som v tom s vami, žiadna teória od stola. Podporujem zavádzanie zlepšovacích techník Lean a Six Sigma, doplnených modernými AI agentmi a automatizačnými nástrojmi, ktoré fungujú v reálnej prevádzke.“',
-    'about.body2': 'Viac ako 15 rokov riadim projekty a zlepšovanie prevádzkových procesov — v oprave spotrebnej elektroniky pre významných OEM a s tým spojenej reverznej logistike, ako projektový manažér v energetike, pri implementácii softvéru pre štátne organizácie aj pri návrhu a dodaní riešenia pre FMCG zákazníka, a v posledných rokoch ako transformačný konzultant — vrátane obratu firmy zo straty do zisku za 4 mesiace. Som certifikovaný Lean Six Sigma Green Belt so skúsenosťami naprieč EMEA, NAM aj LatAm.',
+    'about.body2': 'Viac ako 15 rokov riadim projekty a zlepšovanie prevádzkových procesov — v oprave spotrebnej elektroniky pre významných OEM a s tým spojenej reverznej logistiky, ako projektový manažér v energetike, pri implementácii softvéru pre štátne organizácie aj pri návrhu a dodaní riešenia pre FMCG zákazníka, a v posledných rokoch ako transformačný konzultant — vrátane obratu firmy zo straty do zisku za 4 mesiace. Som certifikovaný Lean Six Sigma Green Belt so skúsenosťami naprieč EMEA, NAM aj LatAm.',
     'services.label': 'Oblasti spolupráce',
     'services.heading': 'Ako tieto oblasti menia a pomáhajú',
     'services.management.title': 'Management',
