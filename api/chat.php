@@ -18,6 +18,75 @@ register_shutdown_function(function () {
 
 header('Content-Type: application/json; charset=utf-8');
 
+function client_ip() {
+    $forwarded = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
+    if ($forwarded !== '') {
+        $parts = explode(',', $forwarded);
+        return trim($parts[0]);
+    }
+    return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+}
+
+function rate_limit_ok($ip, $limit, $windowSeconds) {
+    $file = __DIR__ . '/data/ratelimit.json';
+    $fp = @fopen($file, 'c+');
+    if ($fp === false) {
+        return true;
+    }
+    flock($fp, LOCK_EX);
+    $contents = stream_get_contents($fp);
+    $data = json_decode((string) $contents, true);
+    if (!is_array($data)) {
+        $data = [];
+    }
+    $now = time();
+    $timestamps = $data[$ip] ?? [];
+    $timestamps = array_values(array_filter($timestamps, function ($t) use ($now, $windowSeconds) {
+        return ($now - $t) < $windowSeconds;
+    }));
+    $allowed = count($timestamps) < $limit;
+    if ($allowed) {
+        $timestamps[] = $now;
+    }
+    $data[$ip] = $timestamps;
+    if (count($data) > 500) {
+        $data = array_slice($data, -200, null, true);
+    }
+    rewind($fp);
+    ftruncate($fp, 0);
+    fwrite($fp, json_encode($data));
+    fflush($fp);
+    flock($fp, LOCK_UN);
+    fclose($fp);
+    return $allowed;
+}
+
+function daily_email_cap_ok($limit) {
+    $file = __DIR__ . '/data/emailcount.json';
+    $fp = @fopen($file, 'c+');
+    if ($fp === false) {
+        return true;
+    }
+    flock($fp, LOCK_EX);
+    $contents = stream_get_contents($fp);
+    $data = json_decode((string) $contents, true);
+    $today = gmdate('Y-m-d');
+    if (!is_array($data) || ($data['date'] ?? '') !== $today) {
+        $data = ['date' => $today, 'count' => 0];
+    }
+    $allowed = $data['count'] < $limit;
+    if ($allowed) {
+        $data['count']++;
+    }
+    rewind($fp);
+    ftruncate($fp, 0);
+    fwrite($fp, json_encode($data));
+    fflush($fp);
+    flock($fp, LOCK_UN);
+    fclose($fp);
+    return $allowed;
+}
+
 try {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -40,6 +109,14 @@ $lang = ($input['lang'] ?? 'sk') === 'en' ? 'en' : 'sk';
 if (!is_array($messages) || count($messages) === 0) {
     http_response_code(400);
     echo json_encode(['error' => 'messages array required']);
+    exit;
+}
+
+if (!rate_limit_ok(client_ip(), 10, 600)) {
+    $limitReply = $lang === 'sk'
+        ? 'Poslali ste príliš veľa správ naraz. Skúste to prosím o pár minút znova.'
+        : "You've sent too many messages at once. Please try again in a few minutes.";
+    echo json_encode(['reply' => $limitReply, 'leadCaptured' => false]);
     exit;
 }
 
@@ -110,7 +187,7 @@ for ($i = count($messages) - 1; $i >= 0; $i--) {
     }
 }
 
-if ($lastUser && preg_match('/[\w.+-]+@[\w-]+\.[\w.-]+/', (string) ($lastUser['text'] ?? ''), $match)) {
+if ($lastUser && preg_match('/[\w.+-]+@[\w-]+\.[\w.-]+/', (string) ($lastUser['text'] ?? ''), $match) && daily_email_cap_ok(50)) {
     $visitorEmail = $match[0];
     $fromEmail = defined('FROM_EMAIL') && FROM_EMAIL !== '' ? FROM_EMAIL : 'noreply@' . preg_replace('/^www\./', '', $_SERVER['HTTP_HOST']);
 
