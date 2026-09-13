@@ -203,10 +203,13 @@ $todayLine = ($lang === 'sk' ? 'Dnešný dátum je' : "Today's date is") . ' ' .
 $systemPrompt .= "\n\n" . $todayLine;
 
 $contents = [];
+$transcriptText = '';
 foreach ($messages as $m) {
     $role = ($m['role'] ?? 'user') === 'assistant' ? 'model' : 'user';
     $text = mb_substr((string) ($m['text'] ?? ''), 0, 2000);
     $contents[] = ['role' => $role, 'parts' => [['text' => $text]]];
+    $who = $role === 'user' ? 'Návštevník' : 'AI';
+    $transcriptText .= $who . ': ' . $text . "\n";
 }
 
 $tools = [[
@@ -242,7 +245,7 @@ $tools = [[
     ]
 ]];
 
-function schedule_meeting($args, $lang, $fromEmail) {
+function schedule_meeting($args, $lang, $fromEmail, $transcriptText) {
     $date = $args['date'] ?? '';
     $startTime = $args['startTime'] ?? '';
     $endTime = $args['endTime'] ?? '';
@@ -254,17 +257,18 @@ function schedule_meeting($args, $lang, $fromEmail) {
     }
 
     $summary = $topic !== '' ? ('Konzultácia: ' . $topic) : 'Konzultácia s Igorom';
-    $description = $topic !== ''
+    $icsDescription = $topic !== ''
         ? ('Stretnutie dohodnuté cez web chat. Téma: ' . $topic . '. Kontakt: ' . $email)
         : ('Stretnutie dohodnuté cez web chat. Kontakt: ' . $email);
+    $eventDescription = $icsDescription . "\n\n--- Prepis konverzácie z chatu ---\n" . trim($transcriptText);
 
-    $event = create_calendar_event($date, $startTime, $endTime, $summary, $description);
+    $event = create_calendar_event($date, $startTime, $endTime, $summary, $eventDescription);
     if (!($event['ok'] ?? false)) {
         return $event;
     }
 
     $leadEmail = defined('LEAD_EMAIL') && LEAD_EMAIL !== '' ? LEAD_EMAIL : $fromEmail;
-    $ics = build_ics_invite($date, $startTime, $endTime, $summary, $description, $leadEmail, $email);
+    $ics = build_ics_invite($date, $startTime, $endTime, $summary, $icsDescription, $leadEmail, $email);
 
     $visitorSubjects = ['sk' => 'Pozvánka: ' . $summary, 'en' => 'Invitation: ' . $summary];
     $visitorBodies = [
@@ -340,7 +344,7 @@ for ($toolRound = 0; $toolRound < $maxToolCalls; $toolRound++) {
     if ($fnName === 'check_calendar_availability') {
         $toolResult = check_calendar_availability($args['date'] ?? '', $args['startTime'] ?? '', $args['endTime'] ?? '');
     } elseif ($fnName === 'schedule_meeting') {
-        $toolResult = schedule_meeting($args, $lang, $fromEmail);
+        $toolResult = schedule_meeting($args, $lang, $fromEmail, $transcriptText);
         if ($toolResult['ok'] ?? false) {
             $bookedMeeting = [
                 'date' => $args['date'] ?? null,
@@ -376,12 +380,6 @@ foreach ($messages as $m) {
 }
 
 if ($visitorEmail !== null) {
-    $transcriptText = '';
-    foreach ($messages as $m) {
-        $who = ($m['role'] ?? 'user') === 'user' ? 'Návštevník' : 'AI';
-        $transcriptText .= $who . ': ' . ($m['text'] ?? '') . "\n";
-    }
-
     // Keep the DB row for this email up to date every turn (full transcript + latest meeting status).
     save_lead_to_db($visitorEmail, $lang, $transcriptText, $bookedMeeting);
 
