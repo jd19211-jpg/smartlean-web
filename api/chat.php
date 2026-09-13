@@ -254,8 +254,8 @@ function schedule_meeting($args, $lang, $fromEmail) {
 
     $visitorSubjects = ['sk' => 'Pozvánka: ' . $summary, 'en' => 'Invitation: ' . $summary];
     $visitorBodies = [
-        'sk' => "Dobrý deň,\n\npotvrdzujeme stretnutie s Igorom: $date $startTime–$endTime.\nV prílohe nájdete kalendárovú pozvánku.\n\nS pozdravom,\nIgor",
-        'en' => "Hello,\n\nthis confirms the meeting with Igor: $date $startTime–$endTime.\nA calendar invite is attached.\n\nBest regards,\nIgor"
+        'sk' => "Dobrý deň,\n\npotvrdzujeme stretnutie s Igorom: {$date} {$startTime}–{$endTime}.\nV prílohe nájdete kalendárovú pozvánku.\n\nS pozdravom,\nIgor",
+        'en' => "Hello,\n\nthis confirms the meeting with Igor: {$date} {$startTime}–{$endTime}.\nA calendar invite is attached.\n\nBest regards,\nIgor"
     ];
 
     $boundary = 'smartlean-' . uniqid();
@@ -272,7 +272,7 @@ function schedule_meeting($args, $lang, $fromEmail) {
 
     if (defined('LEAD_EMAIL') && LEAD_EMAIL !== '') {
         $ownerSubject = mb_encode_mimeheader('Nová schôdzka dohodnutá cez chat — ' . $email, 'UTF-8');
-        $ownerBody = "Termín: $date $startTime–$endTime\nKontakt: $email\nTéma: " . ($topic !== '' ? $topic : '(neuvedená)') . "\n\nUdalosť bola automaticky vytvorená vo vašom kalendári.";
+        $ownerBody = "Termín: {$date} {$startTime}–{$endTime}\nKontakt: $email\nTéma: " . ($topic !== '' ? $topic : '(neuvedená)') . "\n\nUdalosť bola automaticky vytvorená vo vašom kalendári.";
         $ownerHeaders = "From: Web chat <$fromEmail>\r\nReply-To: $email\r\nContent-Type: text/plain; charset=UTF-8";
         @mail(LEAD_EMAIL, $ownerSubject, $ownerBody, $ownerHeaders);
     }
