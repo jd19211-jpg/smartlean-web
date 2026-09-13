@@ -217,7 +217,7 @@ $tools = [[
         ],
         [
             'name' => 'schedule_meeting',
-            'description' => "Book the meeting: creates the event in Igor's calendar and sends the visitor a calendar invite by email. Only call this after check_calendar_availability confirmed the slot is free AND you have the visitor's email address. Never call this without first checking availability for that exact time.",
+            'description' => "Book the meeting: creates the event in Igor's calendar and sends the visitor a calendar invite by email. Only call this after (1) check_calendar_availability confirmed the slot is free, (2) you have the visitor's email address, AND (3) the visitor has explicitly confirmed they want to book that slot (do not call this right after just checking availability -- ask the visitor first and wait for a clear yes).",
             'parameters' => [
                 'type' => 'object',
                 'properties' => [
