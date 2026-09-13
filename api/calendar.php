@@ -22,7 +22,7 @@ function google_calendar_access_token() {
     $header = ['alg' => 'RS256', 'typ' => 'JWT'];
     $claims = [
         'iss' => $creds['client_email'],
-        'scope' => 'https://www.googleapis.com/auth/calendar.events',
+        'scope' => 'https://www.googleapis.com/auth/calendar',
         'aud' => 'https://oauth2.googleapis.com/token',
         'iat' => $now,
         'exp' => $now + 3600
