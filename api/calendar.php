@@ -22,7 +22,7 @@ function google_calendar_access_token() {
     $header = ['alg' => 'RS256', 'typ' => 'JWT'];
     $claims = [
         'iss' => $creds['client_email'],
-        'scope' => 'https://www.googleapis.com/auth/calendar.readonly',
+        'scope' => 'https://www.googleapis.com/auth/calendar.events',
         'aud' => 'https://oauth2.googleapis.com/token',
         'iat' => $now,
         'exp' => $now + 3600
@@ -130,4 +130,110 @@ function check_calendar_availability($date, $startTime, $endTime) {
     }
 
     return ['ok' => true, 'available' => count($busy) === 0];
+}
+
+/**
+ * Creates an event on Igor's calendar. Returns ['ok' => true, 'eventId' => string, 'htmlLink' => string]
+ * on success, ['ok' => false, 'reason' => string] on failure.
+ */
+function create_calendar_event($date, $startTime, $endTime, $summary, $description) {
+    if (!defined('GOOGLE_CALENDAR_ID') || GOOGLE_CALENDAR_ID === '') {
+        return ['ok' => false, 'reason' => 'not_configured'];
+    }
+
+    $accessToken = google_calendar_access_token();
+    if ($accessToken === null) {
+        return ['ok' => false, 'reason' => 'auth_failed'];
+    }
+
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $date)
+        || !preg_match('/^\d{2}:\d{2}$/', (string) $startTime)
+        || !preg_match('/^\d{2}:\d{2}$/', (string) $endTime)) {
+        return ['ok' => false, 'reason' => 'invalid_input'];
+    }
+
+    $timeZone = defined('CALENDAR_TIMEZONE') && CALENDAR_TIMEZONE !== '' ? CALENDAR_TIMEZONE : 'Europe/Bratislava';
+
+    try {
+        $tz = new DateTimeZone($timeZone);
+        $startDt = new DateTime($date . 'T' . $startTime . ':00', $tz);
+        $endDt = new DateTime($date . 'T' . $endTime . ':00', $tz);
+    } catch (Exception $e) {
+        return ['ok' => false, 'reason' => 'invalid_input'];
+    }
+
+    $payload = json_encode([
+        'summary' => $summary,
+        'description' => $description,
+        'start' => ['dateTime' => $startDt->format(DateTime::RFC3339), 'timeZone' => $timeZone],
+        'end' => ['dateTime' => $endDt->format(DateTime::RFC3339), 'timeZone' => $timeZone]
+    ]);
+
+    $ch = curl_init('https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode(GOOGLE_CALENDAR_ID) . '/events');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $accessToken
+        ],
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_TIMEOUT => 10
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($response === false || $httpCode < 200 || $httpCode >= 300) {
+        return ['ok' => false, 'reason' => 'event_insert_failed'];
+    }
+
+    $data = json_decode($response, true);
+    if (empty($data['id'])) {
+        return ['ok' => false, 'reason' => 'event_insert_failed'];
+    }
+
+    return ['ok' => true, 'eventId' => $data['id'], 'htmlLink' => $data['htmlLink'] ?? null];
+}
+
+/**
+ * Builds a minimal iCalendar (.ics) REQUEST body for a meeting invite.
+ */
+function build_ics_invite($date, $startTime, $endTime, $summary, $description, $organizerEmail, $attendeeEmail) {
+    $timeZone = defined('CALENDAR_TIMEZONE') && CALENDAR_TIMEZONE !== '' ? CALENDAR_TIMEZONE : 'Europe/Bratislava';
+    $tz = new DateTimeZone($timeZone);
+    $utc = new DateTimeZone('UTC');
+
+    $startDt = (new DateTime($date . 'T' . $startTime . ':00', $tz))->setTimezone($utc);
+    $endDt = (new DateTime($date . 'T' . $endTime . ':00', $tz))->setTimezone($utc);
+    $stamp = (new DateTime('now', $utc));
+
+    $esc = function ($text) {
+        return str_replace(["\\", "\n", ",", ";"], ["\\\\", "\\n", "\\,", "\\;"], (string) $text);
+    };
+
+    $uid = uniqid('smartlean-', true) . '@baterierychle.cz';
+
+    $lines = [
+        'BEGIN:VCALENDAR',
+        'PRODID:-//SmartLean//Chat Booking//EN',
+        'VERSION:2.0',
+        'CALSCALE:GREGORIAN',
+        'METHOD:REQUEST',
+        'BEGIN:VEVENT',
+        'UID:' . $uid,
+        'DTSTAMP:' . $stamp->format('Ymd\THis\Z'),
+        'DTSTART:' . $startDt->format('Ymd\THis\Z'),
+        'DTEND:' . $endDt->format('Ymd\THis\Z'),
+        'SUMMARY:' . $esc($summary),
+        'DESCRIPTION:' . $esc($description),
+        'ORGANIZER;CN=Igor:mailto:' . $organizerEmail,
+        'ATTENDEE;CN=' . $esc($attendeeEmail) . ';RSVP=TRUE:mailto:' . $attendeeEmail,
+        'STATUS:CONFIRMED',
+        'SEQUENCE:0',
+        'END:VEVENT',
+        'END:VCALENDAR'
+    ];
+
+    return implode("\r\n", $lines) . "\r\n";
 }

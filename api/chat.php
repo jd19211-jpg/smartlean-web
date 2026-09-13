@@ -155,6 +155,7 @@ if (!defined('GEMINI_API_KEY') || GEMINI_API_KEY === '') {
 $input = json_decode(file_get_contents('php://input'), true);
 $messages = $input['messages'] ?? null;
 $lang = ($input['lang'] ?? 'sk') === 'en' ? 'en' : 'sk';
+$fromEmail = defined('FROM_EMAIL') && FROM_EMAIL !== '' ? FROM_EMAIL : 'noreply@' . preg_replace('/^www\./', '', $_SERVER['HTTP_HOST']);
 
 if (!is_array($messages) || count($messages) === 0) {
     http_response_code(400);
@@ -195,73 +196,147 @@ foreach ($messages as $m) {
 }
 
 $tools = [[
-    'functionDeclarations' => [[
-        'name' => 'check_calendar_availability',
-        'description' => "Check whether Igor is free or busy in his calendar for a specific date and time range. Always use this before confirming a meeting time a visitor proposes.",
-        'parameters' => [
-            'type' => 'object',
-            'properties' => [
-                'date' => ['type' => 'string', 'description' => 'Date in YYYY-MM-DD format'],
-                'startTime' => ['type' => 'string', 'description' => 'Start time in 24-hour HH:MM format'],
-                'endTime' => ['type' => 'string', 'description' => 'End time in 24-hour HH:MM format (typically 30-60 minutes after startTime)']
-            ],
-            'required' => ['date', 'startTime', 'endTime']
+    'functionDeclarations' => [
+        [
+            'name' => 'check_calendar_availability',
+            'description' => "Check whether Igor is free or busy in his calendar for a specific date and time range. Always use this before confirming a meeting time a visitor proposes.",
+            'parameters' => [
+                'type' => 'object',
+                'properties' => [
+                    'date' => ['type' => 'string', 'description' => 'Date in YYYY-MM-DD format'],
+                    'startTime' => ['type' => 'string', 'description' => 'Start time in 24-hour HH:MM format'],
+                    'endTime' => ['type' => 'string', 'description' => 'End time in 24-hour HH:MM format (typically 30-60 minutes after startTime)']
+                ],
+                'required' => ['date', 'startTime', 'endTime']
+            ]
+        ],
+        [
+            'name' => 'schedule_meeting',
+            'description' => "Book the meeting: creates the event in Igor's calendar and sends the visitor a calendar invite by email. Only call this after check_calendar_availability confirmed the slot is free AND you have the visitor's email address. Never call this without first checking availability for that exact time.",
+            'parameters' => [
+                'type' => 'object',
+                'properties' => [
+                    'date' => ['type' => 'string', 'description' => 'Date in YYYY-MM-DD format'],
+                    'startTime' => ['type' => 'string', 'description' => 'Start time in 24-hour HH:MM format'],
+                    'endTime' => ['type' => 'string', 'description' => 'End time in 24-hour HH:MM format'],
+                    'email' => ['type' => 'string', 'description' => "Visitor's email address"],
+                    'topic' => ['type' => 'string', 'description' => 'Short summary of what the visitor wants to discuss, in a few words']
+                ],
+                'required' => ['date', 'startTime', 'endTime', 'email']
+            ]
         ]
-    ]]
+    ]
 ]];
+
+function schedule_meeting($args, $lang, $fromEmail) {
+    $date = $args['date'] ?? '';
+    $startTime = $args['startTime'] ?? '';
+    $endTime = $args['endTime'] ?? '';
+    $email = trim((string) ($args['email'] ?? ''));
+    $topic = trim((string) ($args['topic'] ?? ''));
+
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return ['ok' => false, 'reason' => 'invalid_email'];
+    }
+
+    $summary = $topic !== '' ? ('Konzultácia: ' . $topic) : 'Konzultácia s Igorom';
+    $description = $topic !== ''
+        ? ('Stretnutie dohodnuté cez web chat. Téma: ' . $topic . '. Kontakt: ' . $email)
+        : ('Stretnutie dohodnuté cez web chat. Kontakt: ' . $email);
+
+    $event = create_calendar_event($date, $startTime, $endTime, $summary, $description);
+    if (!($event['ok'] ?? false)) {
+        return $event;
+    }
+
+    $leadEmail = defined('LEAD_EMAIL') && LEAD_EMAIL !== '' ? LEAD_EMAIL : $fromEmail;
+    $ics = build_ics_invite($date, $startTime, $endTime, $summary, $description, $leadEmail, $email);
+
+    $visitorSubjects = ['sk' => 'Pozvánka: ' . $summary, 'en' => 'Invitation: ' . $summary];
+    $visitorBodies = [
+        'sk' => "Dobrý deň,\n\npotvrdzujeme stretnutie s Igorom: $date $startTime–$endTime.\nV prílohe nájdete kalendárovú pozvánku.\n\nS pozdravom,\nIgor",
+        'en' => "Hello,\n\nthis confirms the meeting with Igor: $date $startTime–$endTime.\nA calendar invite is attached.\n\nBest regards,\nIgor"
+    ];
+
+    $boundary = 'smartlean-' . uniqid();
+    $visitorHeaders = "From: Igor <$fromEmail>\r\nContent-Type: multipart/mixed; boundary=\"$boundary\"";
+    $visitorBody = "--$boundary\r\n"
+        . "Content-Type: text/plain; charset=UTF-8\r\n\r\n"
+        . $visitorBodies[$lang] . "\r\n"
+        . "--$boundary\r\n"
+        . "Content-Type: text/calendar; charset=UTF-8; method=REQUEST\r\n"
+        . "Content-Transfer-Encoding: 8bit\r\n\r\n"
+        . $ics . "\r\n"
+        . "--$boundary--";
+    @mail($email, mb_encode_mimeheader($visitorSubjects[$lang], 'UTF-8'), $visitorBody, $visitorHeaders);
+
+    if (defined('LEAD_EMAIL') && LEAD_EMAIL !== '') {
+        $ownerSubject = mb_encode_mimeheader('Nová schôdzka dohodnutá cez chat — ' . $email, 'UTF-8');
+        $ownerBody = "Termín: $date $startTime–$endTime\nKontakt: $email\nTéma: " . ($topic !== '' ? $topic : '(neuvedená)') . "\n\nUdalosť bola automaticky vytvorená vo vašom kalendári.";
+        $ownerHeaders = "From: Web chat <$fromEmail>\r\nReply-To: $email\r\nContent-Type: text/plain; charset=UTF-8";
+        @mail(LEAD_EMAIL, $ownerSubject, $ownerBody, $ownerHeaders);
+    }
+
+    return ['ok' => true, 'booked' => true];
+}
 
 $fallbackReply = $lang === 'sk'
     ? 'Prepáčte, momentálne neviem odpovedať. Skúste to prosím znova.'
     : "Sorry, I couldn't generate a reply. Please try again.";
 
-$result = gemini_generate_content($systemPrompt, $contents, $tools);
-
-if ($result['response'] === false) {
-    echo json_encode(['error' => 'Gemini request failed', 'detail' => $result['curlError']]);
-    exit;
-}
-
-$geminiData = json_decode($result['response'], true);
-
-if ($result['httpCode'] < 200 || $result['httpCode'] >= 300) {
-    echo json_encode(['error' => 'Gemini API error', 'detail' => $geminiData]);
-    exit;
-}
-
-$parts = $geminiData['candidates'][0]['content']['parts'] ?? [];
-$functionCall = null;
-$functionCallPart = null;
 $reply = null;
-foreach ($parts as $part) {
-    if (isset($part['functionCall'])) {
-        $functionCall = $part['functionCall'];
-        $functionCallPart = $part;
-    }
-    if (isset($part['text'])) {
-        $reply = $part['text'];
-    }
-}
+$maxToolCalls = 4;
 
-if ($functionCall !== null && ($functionCall['name'] ?? '') === 'check_calendar_availability') {
+for ($toolRound = 0; $toolRound < $maxToolCalls; $toolRound++) {
+    $result = gemini_generate_content($systemPrompt, $contents, $tools);
+
+    if ($result['response'] === false) {
+        echo json_encode(['error' => 'Gemini request failed', 'detail' => $result['curlError']]);
+        exit;
+    }
+
+    $geminiData = json_decode($result['response'], true);
+
+    if ($result['httpCode'] < 200 || $result['httpCode'] >= 300) {
+        echo json_encode(['error' => 'Gemini API error', 'detail' => $geminiData]);
+        exit;
+    }
+
+    $parts = $geminiData['candidates'][0]['content']['parts'] ?? [];
+    $functionCall = null;
+    $functionCallPart = null;
+    foreach ($parts as $part) {
+        if (isset($part['functionCall'])) {
+            $functionCall = $part['functionCall'];
+            $functionCallPart = $part;
+        }
+        if (isset($part['text'])) {
+            $reply = $part['text'];
+        }
+    }
+
+    if ($functionCall === null) {
+        break;
+    }
+
+    $fnName = $functionCall['name'] ?? '';
     $args = $functionCall['args'] ?? [];
-    $availability = check_calendar_availability(
-        $args['date'] ?? '',
-        $args['startTime'] ?? '',
-        $args['endTime'] ?? ''
-    );
+
+    if ($fnName === 'check_calendar_availability') {
+        $toolResult = check_calendar_availability($args['date'] ?? '', $args['startTime'] ?? '', $args['endTime'] ?? '');
+    } elseif ($fnName === 'schedule_meeting') {
+        $toolResult = schedule_meeting($args, $lang, $fromEmail);
+    } else {
+        $toolResult = ['ok' => false, 'reason' => 'unknown_function'];
+    }
 
     $contents[] = ['role' => 'model', 'parts' => [$functionCallPart]];
     $contents[] = ['role' => 'user', 'parts' => [['functionResponse' => [
-        'name' => 'check_calendar_availability',
-        'response' => $availability
+        'name' => $fnName,
+        'response' => $toolResult
     ]]]];
 
-    $result2 = gemini_generate_content($systemPrompt, $contents, $tools);
-
-    if ($result2['response'] !== false && $result2['httpCode'] >= 200 && $result2['httpCode'] < 300) {
-        $geminiData2 = json_decode($result2['response'], true);
-        $reply = $geminiData2['candidates'][0]['content']['parts'][0]['text'] ?? $reply;
-    }
+    $reply = null;
 }
 
 if ($reply === null) {
@@ -279,7 +354,6 @@ for ($i = count($messages) - 1; $i >= 0; $i--) {
 
 if ($lastUser && preg_match('/[\w.+-]+@[\w-]+\.[\w.-]+/', (string) ($lastUser['text'] ?? ''), $match)) {
     $visitorEmail = $match[0];
-    $fromEmail = defined('FROM_EMAIL') && FROM_EMAIL !== '' ? FROM_EMAIL : 'noreply@' . preg_replace('/^www\./', '', $_SERVER['HTTP_HOST']);
 
     $transcriptText = '';
     foreach ($messages as $m) {
