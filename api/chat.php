@@ -97,7 +97,16 @@ function save_lead_to_db($email, $lang, $transcriptText, $meeting = null) {
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_TIMEOUT => 5
         ]);
-        $stmt = $pdo->prepare('INSERT INTO leads (email, lang, transcript, meeting_booked, meeting_date, meeting_start, meeting_end, calendar_event_id) VALUES (:email, :lang, :transcript, :meeting_booked, :meeting_date, :meeting_start, :meeting_end, :calendar_event_id)');
+        $stmt = $pdo->prepare('INSERT INTO leads (email, lang, transcript, meeting_booked, meeting_date, meeting_start, meeting_end, calendar_event_id)
+            VALUES (:email, :lang, :transcript, :meeting_booked, :meeting_date, :meeting_start, :meeting_end, :calendar_event_id)
+            ON DUPLICATE KEY UPDATE
+                lang = VALUES(lang),
+                transcript = VALUES(transcript),
+                meeting_booked = GREATEST(meeting_booked, VALUES(meeting_booked)),
+                meeting_date = COALESCE(VALUES(meeting_date), meeting_date),
+                meeting_start = COALESCE(VALUES(meeting_start), meeting_start),
+                meeting_end = COALESCE(VALUES(meeting_end), meeting_end),
+                calendar_event_id = COALESCE(VALUES(calendar_event_id), calendar_event_id)');
         $stmt->execute([
             'email' => $email,
             'lang' => $lang,
@@ -358,26 +367,34 @@ if ($reply === null) {
 }
 
 $leadCaptured = false;
-$lastUser = null;
-for ($i = count($messages) - 1; $i >= 0; $i--) {
-    if (($messages[$i]['role'] ?? '') === 'user') {
-        $lastUser = $messages[$i];
+$visitorEmail = null;
+foreach ($messages as $m) {
+    if (($m['role'] ?? '') === 'user' && preg_match('/[\w.+-]+@[\w-]+\.[\w.-]+/', (string) ($m['text'] ?? ''), $match)) {
+        $visitorEmail = $match[0];
         break;
     }
 }
 
-if ($lastUser && preg_match('/[\w.+-]+@[\w-]+\.[\w.-]+/', (string) ($lastUser['text'] ?? ''), $match)) {
-    $visitorEmail = $match[0];
-
+if ($visitorEmail !== null) {
     $transcriptText = '';
     foreach ($messages as $m) {
         $who = ($m['role'] ?? 'user') === 'user' ? 'Návštevník' : 'AI';
         $transcriptText .= $who . ': ' . ($m['text'] ?? '') . "\n";
     }
 
+    // Keep the DB row for this email up to date every turn (full transcript + latest meeting status).
     save_lead_to_db($visitorEmail, $lang, $transcriptText, $bookedMeeting);
 
-    if (daily_email_cap_ok(50)) {
+    // Only send the "thanks for reaching out" notification the first time this email appears in the conversation.
+    $emailMentionedBefore = false;
+    foreach (array_slice($messages, 0, -1) as $m) {
+        if (($m['role'] ?? '') === 'user' && stripos((string) ($m['text'] ?? ''), $visitorEmail) !== false) {
+            $emailMentionedBefore = true;
+            break;
+        }
+    }
+
+    if (!$emailMentionedBefore && daily_email_cap_ok(50)) {
         if (defined('LEAD_EMAIL') && LEAD_EMAIL !== '') {
             $ownerSubject = mb_encode_mimeheader('Nový kontakt z web chatu — ' . $visitorEmail, 'UTF-8');
             $ownerBody = "Email: $visitorEmail\nJazyk: $lang\nČas: " . gmdate('c') . "\n\nPrepis konverzácie:\n$transcriptText";
