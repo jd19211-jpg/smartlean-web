@@ -109,6 +109,33 @@ function save_lead_to_db($email, $lang, $transcriptText) {
     }
 }
 
+function gemini_generate_content($systemPrompt, $contents, $tools) {
+    $payload = [
+        'systemInstruction' => ['parts' => [['text' => $systemPrompt]]],
+        'contents' => $contents
+    ];
+    if ($tools !== null) {
+        $payload['tools'] = $tools;
+    }
+
+    $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' . GEMINI_API_KEY;
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode($payload),
+        CURLOPT_TIMEOUT => 20
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    return ['response' => $response, 'httpCode' => $httpCode, 'curlError' => $curlError];
+}
+
 try {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -118,6 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/calendar.php';
 
 if (!defined('GEMINI_API_KEY') || GEMINI_API_KEY === '') {
     echo json_encode(['error' => 'Server not configured: missing GEMINI_API_KEY']);
@@ -143,8 +171,8 @@ if (!rate_limit_ok(client_ip(), 10, 600)) {
 }
 
 $systemPromptDefaults = [
-    'sk' => "Si AI asistent na webe Igora, konzultanta pre Management, Lean, Six Sigma a Automatizáciu (UiPath, n8n, AI agenti).\nTvoja úloha je stručne a vecne odpovedať na otázky návštevníkov o týchto oblastiach a o tom, ako môže Igor pomôcť ich firme.\nAk návštevník prejaví reálny záujem o spoluprácu, zdvorilo ho požiadaj o email, aby sa mu Igor mohol ozvať.\nOdpovedaj v slovenčine, stručne (max 3-4 vety), profesionálne a priateľsky. Nevymýšľaj si konkrétne ceny, termíny ani referencie, ktoré nepoznáš.",
-    'en' => "You are the AI assistant on Igor's website, a consultant for Management, Lean, Six Sigma, and Automation (UiPath, n8n, AI agents).\nYour job is to answer visitor questions about these areas concisely and helpfully, and explain how Igor can help their company.\nIf a visitor shows genuine interest in working together, politely ask for their email so Igor can follow up.\nReply in English, concisely (max 3-4 sentences), professional and friendly. Do not invent specific prices, availability, or references you don't know."
+    'sk' => "Si AI asistent na webe Igora, konzultanta pre Management, Lean, Six Sigma a Automatizáciu (UiPath, n8n, AI agenti).\nTvoja úloha je stručne a vecne odpovedať na otázky návštevníkov o týchto oblastiach a o tom, ako môže Igor pomôcť ich firme.\nAk návštevník prejaví reálny záujem o spoluprácu, zdvorilo ho požiadaj o email, aby sa mu Igor mohol ozvať.\nAk návštevník navrhne konkrétny deň a čas stretnutia, použi nástroj check_calendar_availability na overenie, či je Igor v tom čase voľný, a podľa výsledku mu odpovedz (potvrď termín, alebo ho popros o iný čas, ak je obsadený).\nOdpovedaj v slovenčine, stručne (max 3-4 vety), profesionálne a priateľsky. Nevymýšľaj si konkrétne ceny, termíny ani referencie, ktoré nepoznáš.",
+    'en' => "You are the AI assistant on Igor's website, a consultant for Management, Lean, Six Sigma, and Automation (UiPath, n8n, AI agents).\nYour job is to answer visitor questions about these areas concisely and helpfully, and explain how Igor can help their company.\nIf a visitor shows genuine interest in working together, politely ask for their email so Igor can follow up.\nIf a visitor proposes a specific meeting date and time, use the check_calendar_availability tool to check whether Igor is free then, and reply accordingly (confirm the slot, or ask for another time if it's busy).\nReply in English, concisely (max 3-4 sentences), professional and friendly. Do not invent specific prices, availability, or references you don't know."
 ];
 
 $promptFile = __DIR__ . '/../prompts/system-' . $lang . '.txt';
@@ -156,6 +184,9 @@ if (is_readable($promptFile)) {
     }
 }
 
+$todayLine = ($lang === 'sk' ? 'Dnešný dátum je' : "Today's date is") . ' ' . gmdate('Y-m-d') . ' (' . gmdate('l') . ').';
+$systemPrompt .= "\n\n" . $todayLine;
+
 $contents = [];
 foreach ($messages as $m) {
     $role = ($m['role'] ?? 'user') === 'assistant' ? 'model' : 'user';
@@ -163,42 +194,77 @@ foreach ($messages as $m) {
     $contents[] = ['role' => $role, 'parts' => [['text' => $text]]];
 }
 
-$payload = json_encode([
-    'systemInstruction' => ['parts' => [['text' => $systemPrompt]]],
-    'contents' => $contents
-]);
+$tools = [[
+    'functionDeclarations' => [[
+        'name' => 'check_calendar_availability',
+        'description' => "Check whether Igor is free or busy in his calendar for a specific date and time range. Always use this before confirming a meeting time a visitor proposes.",
+        'parameters' => [
+            'type' => 'object',
+            'properties' => [
+                'date' => ['type' => 'string', 'description' => 'Date in YYYY-MM-DD format'],
+                'startTime' => ['type' => 'string', 'description' => 'Start time in 24-hour HH:MM format'],
+                'endTime' => ['type' => 'string', 'description' => 'End time in 24-hour HH:MM format (typically 30-60 minutes after startTime)']
+            ],
+            'required' => ['date', 'startTime', 'endTime']
+        ]
+    ]]
+]];
 
-$url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' . GEMINI_API_KEY;
+$fallbackReply = $lang === 'sk'
+    ? 'Prepáčte, momentálne neviem odpovedať. Skúste to prosím znova.'
+    : "Sorry, I couldn't generate a reply. Please try again.";
 
-$ch = curl_init($url);
-curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_POST => true,
-    CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
-    CURLOPT_POSTFIELDS => $payload,
-    CURLOPT_TIMEOUT => 20
-]);
-$response = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$curlError = curl_error($ch);
-curl_close($ch);
+$result = gemini_generate_content($systemPrompt, $contents, $tools);
 
-if ($response === false) {
-    echo json_encode(['error' => 'Gemini request failed', 'detail' => $curlError]);
+if ($result['response'] === false) {
+    echo json_encode(['error' => 'Gemini request failed', 'detail' => $result['curlError']]);
     exit;
 }
 
-$geminiData = json_decode($response, true);
+$geminiData = json_decode($result['response'], true);
 
-if ($httpCode < 200 || $httpCode >= 300) {
+if ($result['httpCode'] < 200 || $result['httpCode'] >= 300) {
     echo json_encode(['error' => 'Gemini API error', 'detail' => $geminiData]);
     exit;
 }
 
-$reply = $geminiData['candidates'][0]['content']['parts'][0]['text']
-    ?? ($lang === 'sk'
-        ? 'Prepáčte, momentálne neviem odpovedať. Skúste to prosím znova.'
-        : "Sorry, I couldn't generate a reply. Please try again.");
+$parts = $geminiData['candidates'][0]['content']['parts'] ?? [];
+$functionCall = null;
+$reply = null;
+foreach ($parts as $part) {
+    if (isset($part['functionCall'])) {
+        $functionCall = $part['functionCall'];
+    }
+    if (isset($part['text'])) {
+        $reply = $part['text'];
+    }
+}
+
+if ($functionCall !== null && ($functionCall['name'] ?? '') === 'check_calendar_availability') {
+    $args = $functionCall['args'] ?? [];
+    $availability = check_calendar_availability(
+        $args['date'] ?? '',
+        $args['startTime'] ?? '',
+        $args['endTime'] ?? ''
+    );
+
+    $contents[] = ['role' => 'model', 'parts' => [['functionCall' => $functionCall]]];
+    $contents[] = ['role' => 'function', 'parts' => [['functionResponse' => [
+        'name' => 'check_calendar_availability',
+        'response' => $availability
+    ]]]];
+
+    $result2 = gemini_generate_content($systemPrompt, $contents, $tools);
+
+    if ($result2['response'] !== false && $result2['httpCode'] >= 200 && $result2['httpCode'] < 300) {
+        $geminiData2 = json_decode($result2['response'], true);
+        $reply = $geminiData2['candidates'][0]['content']['parts'][0]['text'] ?? $reply;
+    }
+}
+
+if ($reply === null) {
+    $reply = $fallbackReply;
+}
 
 $leadCaptured = false;
 $lastUser = null;

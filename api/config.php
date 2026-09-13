@@ -6,3 +6,5 @@ define('DB_HOST', '');
 define('DB_NAME', '');
 define('DB_USER', '');
 define('DB_PASS', '');
+define('GOOGLE_CALENDAR_ID', '');
+define('CALENDAR_TIMEZONE', 'Europe/Bratislava');

@@ -1,4 +1,4 @@
-<Files "config.php">
+<FilesMatch "^(config\.php|google-service-account\.json)$">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>
@@ -6,4 +6,4 @@
         Order allow,deny
         Deny from all
     </IfModule>
-</Files>
+</FilesMatch>
