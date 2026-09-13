@@ -87,6 +87,28 @@ function daily_email_cap_ok($limit) {
     return $allowed;
 }
 
+function save_lead_to_db($email, $lang, $transcriptText) {
+    if (!defined('DB_HOST') || DB_HOST === '' || !defined('DB_NAME') || DB_NAME === '') {
+        return false;
+    }
+    try {
+        $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4';
+        $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_TIMEOUT => 5
+        ]);
+        $stmt = $pdo->prepare('INSERT INTO leads (email, lang, transcript) VALUES (:email, :lang, :transcript)');
+        $stmt->execute([
+            'email' => $email,
+            'lang' => $lang,
+            'transcript' => $transcriptText
+        ]);
+        return true;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 try {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -187,30 +209,35 @@ for ($i = count($messages) - 1; $i >= 0; $i--) {
     }
 }
 
-if ($lastUser && preg_match('/[\w.+-]+@[\w-]+\.[\w.-]+/', (string) ($lastUser['text'] ?? ''), $match) && daily_email_cap_ok(50)) {
+if ($lastUser && preg_match('/[\w.+-]+@[\w-]+\.[\w.-]+/', (string) ($lastUser['text'] ?? ''), $match)) {
     $visitorEmail = $match[0];
     $fromEmail = defined('FROM_EMAIL') && FROM_EMAIL !== '' ? FROM_EMAIL : 'noreply@' . preg_replace('/^www\./', '', $_SERVER['HTTP_HOST']);
 
-    if (defined('LEAD_EMAIL') && LEAD_EMAIL !== '') {
-        $transcriptText = '';
-        foreach ($messages as $m) {
-            $who = ($m['role'] ?? 'user') === 'user' ? 'Návštevník' : 'AI';
-            $transcriptText .= $who . ': ' . ($m['text'] ?? '') . "\n";
-        }
-        $ownerSubject = mb_encode_mimeheader('Nový kontakt z web chatu — ' . $visitorEmail, 'UTF-8');
-        $ownerBody = "Email: $visitorEmail\nJazyk: $lang\nČas: " . gmdate('c') . "\n\nPrepis konverzácie:\n$transcriptText";
-        $ownerHeaders = "From: Web chat <$fromEmail>\r\nReply-To: $visitorEmail\r\nContent-Type: text/plain; charset=UTF-8";
-        $leadCaptured = @mail(LEAD_EMAIL, $ownerSubject, $ownerBody, $ownerHeaders);
+    $transcriptText = '';
+    foreach ($messages as $m) {
+        $who = ($m['role'] ?? 'user') === 'user' ? 'Návštevník' : 'AI';
+        $transcriptText .= $who . ': ' . ($m['text'] ?? '') . "\n";
     }
 
-    $confirmSubjects = ['sk' => 'Ďakujeme za vašu správu', 'en' => 'Thank you for your message'];
-    $confirmBodies = [
-        'sk' => "Dobrý deň,\n\nďakujeme za vašu správu cez web chat. Igor sa vám čo najskôr ozve.\n\nS pozdravom,\nIgor",
-        'en' => "Hello,\n\nthank you for reaching out via the website chat. Igor will get back to you as soon as possible.\n\nBest regards,\nIgor"
-    ];
-    $visitorSubject = mb_encode_mimeheader($confirmSubjects[$lang], 'UTF-8');
-    $visitorHeaders = "From: Igor <$fromEmail>\r\nContent-Type: text/plain; charset=UTF-8";
-    @mail($visitorEmail, $visitorSubject, $confirmBodies[$lang], $visitorHeaders);
+    save_lead_to_db($visitorEmail, $lang, $transcriptText);
+
+    if (daily_email_cap_ok(50)) {
+        if (defined('LEAD_EMAIL') && LEAD_EMAIL !== '') {
+            $ownerSubject = mb_encode_mimeheader('Nový kontakt z web chatu — ' . $visitorEmail, 'UTF-8');
+            $ownerBody = "Email: $visitorEmail\nJazyk: $lang\nČas: " . gmdate('c') . "\n\nPrepis konverzácie:\n$transcriptText";
+            $ownerHeaders = "From: Web chat <$fromEmail>\r\nReply-To: $visitorEmail\r\nContent-Type: text/plain; charset=UTF-8";
+            $leadCaptured = @mail(LEAD_EMAIL, $ownerSubject, $ownerBody, $ownerHeaders);
+        }
+
+        $confirmSubjects = ['sk' => 'Ďakujeme za vašu správu', 'en' => 'Thank you for your message'];
+        $confirmBodies = [
+            'sk' => "Dobrý deň,\n\nďakujeme za vašu správu cez web chat. Igor sa vám čo najskôr ozve.\n\nS pozdravom,\nIgor",
+            'en' => "Hello,\n\nthank you for reaching out via the website chat. Igor will get back to you as soon as possible.\n\nBest regards,\nIgor"
+        ];
+        $visitorSubject = mb_encode_mimeheader($confirmSubjects[$lang], 'UTF-8');
+        $visitorHeaders = "From: Igor <$fromEmail>\r\nContent-Type: text/plain; charset=UTF-8";
+        @mail($visitorEmail, $visitorSubject, $confirmBodies[$lang], $visitorHeaders);
+    }
 }
 
 echo json_encode(['reply' => $reply, 'leadCaptured' => $leadCaptured]);
