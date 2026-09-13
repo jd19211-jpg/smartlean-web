@@ -84,8 +84,17 @@ function check_calendar_availability($date, $startTime, $endTime) {
     }
 
     $timeZone = defined('CALENDAR_TIMEZONE') && CALENDAR_TIMEZONE !== '' ? CALENDAR_TIMEZONE : 'Europe/Bratislava';
-    $timeMin = $date . 'T' . $startTime . ':00';
-    $timeMax = $date . 'T' . $endTime . ':00';
+
+    try {
+        $tz = new DateTimeZone($timeZone);
+        $minDt = new DateTime($date . 'T' . $startTime . ':00', $tz);
+        $maxDt = new DateTime($date . 'T' . $endTime . ':00', $tz);
+    } catch (Exception $e) {
+        return ['ok' => false, 'reason' => 'invalid_input'];
+    }
+
+    $timeMin = $minDt->format(DateTime::RFC3339);
+    $timeMax = $maxDt->format(DateTime::RFC3339);
 
     $payload = json_encode([
         'timeMin' => $timeMin,

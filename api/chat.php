@@ -230,10 +230,12 @@ if ($result['httpCode'] < 200 || $result['httpCode'] >= 300) {
 
 $parts = $geminiData['candidates'][0]['content']['parts'] ?? [];
 $functionCall = null;
+$functionCallPart = null;
 $reply = null;
 foreach ($parts as $part) {
     if (isset($part['functionCall'])) {
         $functionCall = $part['functionCall'];
+        $functionCallPart = $part;
     }
     if (isset($part['text'])) {
         $reply = $part['text'];
@@ -248,8 +250,8 @@ if ($functionCall !== null && ($functionCall['name'] ?? '') === 'check_calendar_
         $args['endTime'] ?? ''
     );
 
-    $contents[] = ['role' => 'model', 'parts' => [['functionCall' => $functionCall]]];
-    $contents[] = ['role' => 'function', 'parts' => [['functionResponse' => [
+    $contents[] = ['role' => 'model', 'parts' => [$functionCallPart]];
+    $contents[] = ['role' => 'user', 'parts' => [['functionResponse' => [
         'name' => 'check_calendar_availability',
         'response' => $availability
     ]]]];
