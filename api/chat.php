@@ -123,6 +123,36 @@ function save_lead_to_db($email, $lang, $transcriptText, $meeting = null) {
     }
 }
 
+function save_chat_log($conversationId, $lang, $transcriptText, $email, $meetingBooked) {
+    if (!defined('DB_HOST') || DB_HOST === '' || !defined('DB_NAME') || DB_NAME === '') {
+        return false;
+    }
+    try {
+        $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4';
+        $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_TIMEOUT => 5
+        ]);
+        $stmt = $pdo->prepare('INSERT INTO chat_logs (conversation_id, lang, transcript, email, meeting_booked)
+            VALUES (:conversation_id, :lang, :transcript, :email, :meeting_booked)
+            ON DUPLICATE KEY UPDATE
+                lang = VALUES(lang),
+                transcript = VALUES(transcript),
+                email = COALESCE(VALUES(email), email),
+                meeting_booked = GREATEST(meeting_booked, VALUES(meeting_booked))');
+        $stmt->execute([
+            'conversation_id' => $conversationId,
+            'lang' => $lang,
+            'transcript' => $transcriptText,
+            'email' => $email,
+            'meeting_booked' => $meetingBooked ? 1 : 0
+        ]);
+        return true;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 function gemini_generate_content($systemPrompt, $contents, $tools) {
     $payload = [
         'systemInstruction' => ['parts' => [['text' => $systemPrompt]]],
@@ -170,6 +200,10 @@ $input = json_decode(file_get_contents('php://input'), true);
 $messages = $input['messages'] ?? null;
 $lang = ($input['lang'] ?? 'sk') === 'en' ? 'en' : 'sk';
 $fromEmail = defined('FROM_EMAIL') && FROM_EMAIL !== '' ? FROM_EMAIL : 'noreply@' . preg_replace('/^www\./', '', $_SERVER['HTTP_HOST']);
+$conversationId = trim((string) ($input['conversationId'] ?? ''));
+if ($conversationId === '' || strlen($conversationId) > 64) {
+    $conversationId = uniqid('conv-', true);
+}
 
 if (!is_array($messages) || count($messages) === 0) {
     http_response_code(400);
@@ -378,6 +412,9 @@ foreach ($messages as $m) {
         break;
     }
 }
+
+// Log every conversation (even without an email), one row per conversation, kept up to date each turn.
+save_chat_log($conversationId, $lang, $transcriptText, $visitorEmail, $bookedMeeting !== null);
 
 if ($visitorEmail !== null) {
     // Keep the DB row for this email up to date every turn (full transcript + latest meeting status).

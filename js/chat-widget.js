@@ -3,6 +3,15 @@ const CHAT_ENDPOINT = 'api/chat.php';
 let chatHistory = [];
 let chatGreetingLang = null;
 
+function generateConversationId() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return window.crypto.randomUUID();
+  }
+  return 'conv-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+}
+
+const conversationId = generateConversationId();
+
 function chatT(key) {
   const lang = currentLang();
   return translations[lang][key] || key;
@@ -76,7 +85,7 @@ function initChatWidget() {
       const response = await fetch(CHAT_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: chatHistory, lang: currentLang() })
+        body: JSON.stringify({ messages: chatHistory, lang: currentLang(), conversationId })
       });
 
       if (!response.ok) throw new Error('Chat backend not available');
