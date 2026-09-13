@@ -82,8 +82,7 @@ const translations = {
     'chat.placeholder': 'Napíšte správu…',
     'chat.send': 'Odoslať',
     'chat.thinking': 'Píše…',
-    'chat.unavailable': 'AI asistent momentálne nie je pripojený. Napíšte mi prosím priamo cez formulár nižšie alebo na ' + LEAD_EMAIL + '.',
-    'chat.leadNotice': 'Ďakujem, mám váš kontakt — ozvem sa vám čo najskôr.'
+    'chat.unavailable': 'AI asistent momentálne nie je pripojený. Napíšte mi prosím priamo cez formulár nižšie alebo na ' + LEAD_EMAIL + '.'
   },
   en: {
     'nav.home': 'Home',
@@ -165,8 +164,7 @@ const translations = {
     'chat.placeholder': 'Type a message…',
     'chat.send': 'Send',
     'chat.thinking': 'Typing…',
-    'chat.unavailable': 'The AI assistant is not connected yet. Please use the form below or email me directly at ' + LEAD_EMAIL + '.',
-    'chat.leadNotice': "Thanks, I have your contact info — I'll get back to you as soon as possible."
+    'chat.unavailable': 'The AI assistant is not connected yet. Please use the form below or email me directly at ' + LEAD_EMAIL + '.'
   }
 };
 

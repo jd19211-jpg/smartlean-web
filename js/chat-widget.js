@@ -88,10 +88,6 @@ function initChatWidget() {
       const reply = data.reply || chatT('chat.unavailable');
       chatHistory.push({ role: 'assistant', text: reply });
       renderBubble(messages, 'assistant', reply);
-
-      if (data.leadCaptured) {
-        renderBubble(messages, 'assistant', chatT('chat.leadNotice'));
-      }
     } catch (err) {
       typingBubble.remove();
       renderBubble(messages, 'assistant', chatT('chat.unavailable'));
