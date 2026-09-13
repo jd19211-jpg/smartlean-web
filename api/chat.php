@@ -87,7 +87,7 @@ function daily_email_cap_ok($limit) {
     return $allowed;
 }
 
-function save_lead_to_db($email, $lang, $transcriptText) {
+function save_lead_to_db($email, $lang, $transcriptText, $meeting = null) {
     if (!defined('DB_HOST') || DB_HOST === '' || !defined('DB_NAME') || DB_NAME === '') {
         return false;
     }
@@ -97,11 +97,16 @@ function save_lead_to_db($email, $lang, $transcriptText) {
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_TIMEOUT => 5
         ]);
-        $stmt = $pdo->prepare('INSERT INTO leads (email, lang, transcript) VALUES (:email, :lang, :transcript)');
+        $stmt = $pdo->prepare('INSERT INTO leads (email, lang, transcript, meeting_booked, meeting_date, meeting_start, meeting_end, calendar_event_id) VALUES (:email, :lang, :transcript, :meeting_booked, :meeting_date, :meeting_start, :meeting_end, :calendar_event_id)');
         $stmt->execute([
             'email' => $email,
             'lang' => $lang,
-            'transcript' => $transcriptText
+            'transcript' => $transcriptText,
+            'meeting_booked' => $meeting !== null ? 1 : 0,
+            'meeting_date' => $meeting['date'] ?? null,
+            'meeting_start' => $meeting['startTime'] ?? null,
+            'meeting_end' => $meeting['endTime'] ?? null,
+            'calendar_event_id' => $meeting['eventId'] ?? null
         ]);
         return true;
     } catch (Throwable $e) {
@@ -277,7 +282,7 @@ function schedule_meeting($args, $lang, $fromEmail) {
         @mail(LEAD_EMAIL, $ownerSubject, $ownerBody, $ownerHeaders);
     }
 
-    return ['ok' => true, 'booked' => true];
+    return ['ok' => true, 'booked' => true, 'eventId' => $event['eventId'] ?? null];
 }
 
 $fallbackReply = $lang === 'sk'
@@ -285,6 +290,7 @@ $fallbackReply = $lang === 'sk'
     : "Sorry, I couldn't generate a reply. Please try again.";
 
 $reply = null;
+$bookedMeeting = null;
 $maxToolCalls = 4;
 
 for ($toolRound = 0; $toolRound < $maxToolCalls; $toolRound++) {
@@ -326,6 +332,14 @@ for ($toolRound = 0; $toolRound < $maxToolCalls; $toolRound++) {
         $toolResult = check_calendar_availability($args['date'] ?? '', $args['startTime'] ?? '', $args['endTime'] ?? '');
     } elseif ($fnName === 'schedule_meeting') {
         $toolResult = schedule_meeting($args, $lang, $fromEmail);
+        if ($toolResult['ok'] ?? false) {
+            $bookedMeeting = [
+                'date' => $args['date'] ?? null,
+                'startTime' => $args['startTime'] ?? null,
+                'endTime' => $args['endTime'] ?? null,
+                'eventId' => $toolResult['eventId'] ?? null
+            ];
+        }
     } else {
         $toolResult = ['ok' => false, 'reason' => 'unknown_function'];
     }
@@ -361,7 +375,7 @@ if ($lastUser && preg_match('/[\w.+-]+@[\w-]+\.[\w.-]+/', (string) ($lastUser['t
         $transcriptText .= $who . ': ' . ($m['text'] ?? '') . "\n";
     }
 
-    save_lead_to_db($visitorEmail, $lang, $transcriptText);
+    save_lead_to_db($visitorEmail, $lang, $transcriptText, $bookedMeeting);
 
     if (daily_email_cap_ok(50)) {
         if (defined('LEAD_EMAIL') && LEAD_EMAIL !== '') {
