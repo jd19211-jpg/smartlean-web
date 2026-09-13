@@ -521,10 +521,9 @@ a { color: inherit; }
   position: absolute;
   right: 0;
   bottom: 76px;
-  width: 360px;
+  width: 400px;
   max-width: calc(100vw - 48px);
-  height: 480px;
-  max-height: calc(100vh - 160px);
+  height: min(680px, calc(100vh - 120px));
   background: var(--white);
   border-radius: 12px;
   box-shadow: 0 16px 48px rgba(16, 35, 63, 0.28);
