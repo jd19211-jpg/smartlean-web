@@ -395,6 +395,8 @@ a { color: inherit; }
 .contact h2 { color: var(--white); }
 .contact-intro p { color: var(--gray-300); }
 .contact .section-label { color: var(--red-light); }
+.contact-detail a { color: var(--red-light); text-decoration: underline; text-underline-offset: 3px; }
+.contact-detail a:hover { color: var(--white); }
 
 .contact-illustration {
   width: 100%;
