@@ -1,5 +1,5 @@
 const LEAD_EMAIL = 'jd19211@gmail.com';
-const FORMSPREE_ENDPOINT = 'https://formspree.io/f/YOUR_FORM_ID';
+const CONTACT_ENDPOINT = 'api/contact.php';
 
 const translations = {
   sk: {
@@ -73,7 +73,6 @@ const translations = {
     'contact.form.sending': 'Odosielam…',
     'contact.form.success': 'Ďakujem! Ozvem sa vám čo najskôr.',
     'contact.form.error': 'Niečo sa pokazilo. Skúste to prosím znova, alebo mi napíšte priamo na ' + LEAD_EMAIL + '.',
-    'contact.form.mailtoNotice': 'Otvorí sa váš emailový klient s predvyplnenou správou.',
     'footer.text': '© 2026 Igor. Všetky práva vyhradené.',
     'chat.toggleLabel': 'Otvoriť chat',
     'chat.title': 'Opýtajte sa ma',
@@ -155,7 +154,6 @@ const translations = {
     'contact.form.sending': 'Sending…',
     'contact.form.success': "Thank you! I'll get back to you as soon as possible.",
     'contact.form.error': 'Something went wrong. Please try again, or email me directly at ' + LEAD_EMAIL + '.',
-    'contact.form.mailtoNotice': 'Your email client will open with a pre-filled message.',
     'footer.text': '© 2026 Igor. All rights reserved.',
     'chat.toggleLabel': 'Open chat',
     'chat.title': 'Ask me anything',
@@ -231,31 +229,18 @@ function initForm() {
     event.preventDefault();
     const lang = currentLang();
     const data = new FormData(form);
-    const name = data.get('name');
-    const email = data.get('email');
-    const company = data.get('company');
-    const message = data.get('message');
-
-    if (FORMSPREE_ENDPOINT.includes('YOUR_FORM_ID')) {
-      const subject = encodeURIComponent(`Nová správa z webu od ${name}`);
-      const body = encodeURIComponent(
-        `Meno: ${name}\nEmail: ${email}\nSpoločnosť: ${company || '-'}\n\n${message}`
-      );
-      window.location.href = `mailto:${LEAD_EMAIL}?subject=${subject}&body=${body}`;
-      status.textContent = translations[lang]['contact.form.mailtoNotice'];
-      return;
-    }
 
     submitBtn.disabled = true;
     status.textContent = translations[lang]['contact.form.sending'];
 
     try {
-      const response = await fetch(FORMSPREE_ENDPOINT, {
+      const response = await fetch(CONTACT_ENDPOINT, {
         method: 'POST',
         headers: { Accept: 'application/json' },
         body: data
       });
-      if (response.ok) {
+      const result = await response.json().catch(() => ({}));
+      if (response.ok && result.ok) {
         status.textContent = translations[lang]['contact.form.success'];
         form.reset();
       } else {
