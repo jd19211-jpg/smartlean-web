@@ -227,6 +227,7 @@ function initForm() {
     event.preventDefault();
     const lang = currentLang();
     const data = new FormData(form);
+    data.append('lang', lang);
 
     submitBtn.disabled = true;
     status.textContent = translations[lang]['contact.form.sending'];

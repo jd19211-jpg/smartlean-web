@@ -69,6 +69,7 @@ $name = trim((string) ($_POST['name'] ?? ''));
 $email = trim((string) ($_POST['email'] ?? ''));
 $company = trim((string) ($_POST['company'] ?? ''));
 $message = trim((string) ($_POST['message'] ?? ''));
+$lang = ($_POST['lang'] ?? 'sk') === 'en' ? 'en' : 'sk';
 
 if ($name === '' || $message === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     echo json_encode(['error' => 'invalid_input']);
@@ -92,6 +93,15 @@ if (!$sent) {
     echo json_encode(['error' => 'send_failed']);
     exit;
 }
+
+$confirmSubjects = ['sk' => 'Ďakujeme za vašu správu', 'en' => 'Thank you for your message'];
+$confirmBodies = [
+    'sk' => "Dobrý deň $name,\n\nďakujeme za vašu správu cez web. Igor sa vám čo najskôr ozve.\n\nS pozdravom,\nIgor",
+    'en' => "Hello $name,\n\nthank you for reaching out via the website. Igor will get back to you as soon as possible.\n\nBest regards,\nIgor"
+];
+$visitorSubject = mb_encode_mimeheader($confirmSubjects[$lang], 'UTF-8');
+$visitorHeaders = "From: Igor <$fromEmail>\r\nContent-Type: text/plain; charset=UTF-8";
+@mail($email, $visitorSubject, $confirmBodies[$lang], $visitorHeaders);
 
 echo json_encode(['ok' => true]);
 
