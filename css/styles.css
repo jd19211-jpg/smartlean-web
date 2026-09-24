@@ -272,6 +272,15 @@ a { color: inherit; }
   margin-bottom: 12px;
 }
 
+.service-quote {
+  margin: 16px 0 0;
+  padding-left: 14px;
+  border-left: 3px solid var(--red);
+  color: var(--navy);
+  font-style: italic;
+  font-weight: 500;
+}
+
 .tag-list {
   list-style: none;
   padding: 0;
